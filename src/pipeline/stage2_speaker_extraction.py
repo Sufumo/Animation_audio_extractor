@@ -132,6 +132,12 @@ def run_stage2(
             silence_out = tse_v1_path
             silence_map = None
 
+        # Early exit: if no ASR/SRT/rebuild components are enabled, return the
+        # best audio we have so far (silence-removed or TSE output).
+        if not any(c in components for c in ("aliyun_asr", "srt_cleaning", "rebuild_clips")):
+            all_clips.append(silence_out)
+            continue
+
         # Step 3: Aliyun ASR with diarization
         if "aliyun_asr" in components:
             task_state.mark_started("stage2", step=f"{ep_prefix}_aliyun_asr")

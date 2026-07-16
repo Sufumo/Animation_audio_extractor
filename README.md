@@ -103,6 +103,18 @@ A fast local test that only converts `data/test.mp4` to WAV:
 python main.py --test-local
 ```
 
+An extended local test that trims `test.mp4` to the first N seconds and runs **BGM removal + UniSE target speaker extraction** (no cloud ASR):
+
+```bash
+# default trim is 30 seconds
+python main.py --test-local-full
+
+# custom trim length
+python main.py --test-local-full --test-trim-seconds 10
+```
+
+**Note on UniSE checkpoint:** Some systems or cleanup tools may delete files named `epoch=...ckpt`. If that happens, rename the UniSE checkpoint to `unise.ckpt` and update `configs/default.yaml` accordingly.
+
 ## Standalone Script
 
 ```bash

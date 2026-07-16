@@ -6,21 +6,16 @@ stage1:
   enabled: true
   components:
   - mp4_to_wav
-  - oped_removal
   - bgm_removal
   sample_rate: 44100
   mono: false
   bit_depth: 16
   bgm_segment_seconds: 360.0
-  keep_instrumental: false
+  keep_instrumental: true
 stage2:
   enabled: true
   components:
   - unise_tse_v1
-  - silence_removal
-  - aliyun_asr
-  - srt_cleaning
-  - rebuild_clips
   segment_seconds: 360.0
   asr_speaker_count: null
   srt_model: qwen3.6-max

@@ -7,6 +7,7 @@ enrollment for each chunk, then merged back.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,38 @@ from src.audio_utils import convert_to_wav, get_duration, merge_audio, split_aud
 
 DEFAULT_SEGMENT_SECONDS = 360.0
 DEFAULT_ENROLL_DURATION = 5.0
+
+
+def _get_compatible_test_script(unise_dir: Path, tmp_dir: Path) -> Path:
+    """Return a PyTorch 2.6+ compatible copy of UniSE test.py placed in unise_dir.
+
+    The copy is placed inside unise_dir so that relative imports (`from model ...`)
+    still work. The original test.py is never modified. The caller should remove
+    the patched file when done.
+    """
+    original = unise_dir / "test.py"
+    # Place patched copy in unise_dir so imports resolve.
+    patched = unise_dir / f"test_patched_{tmp_dir.name}.py"
+    source = original.read_text(encoding="utf-8")
+
+    # If already patched or original already passes weights_only=False, use original.
+    if "weights_only=False" in source:
+        return original
+
+    # Match the trainer.test call and inject weights_only=False.
+    pattern = r"(trainer\.test\([^)]+ckpt_path=config\['ckpt_path'\])\)"
+    replacement = r"\1, weights_only=False)"
+    new_source = re.sub(pattern, replacement, source)
+
+    if "weights_only=False" not in new_source:
+        # Fallback: replace the exact original call.
+        new_source = source.replace(
+            "trainer.test(model, data_module, ckpt_path=config['ckpt_path'])",
+            "trainer.test(model, data_module, ckpt_path=config['ckpt_path'], weights_only=False)",
+        )
+
+    patched.write_text(new_source, encoding="utf-8")
+    return patched
 
 
 def _build_unise_config(
@@ -153,13 +186,19 @@ def run_unise_tse(
             enroll_duration=enroll_duration,
         )
 
-        cmd = [
-            sys.executable,
-            str(test_script),
-            "--config", str(config_path),
-            "--save_enhanced", str(out_dir),
-        ]
-        subprocess.run(cmd, cwd=str(unise_dir), check=True)
+        patched_test_script = _get_compatible_test_script(unise_dir, tmp_dir)
+        try:
+            cmd = [
+                sys.executable,
+                str(patched_test_script),
+                "--config", str(config_path),
+                "--save_enhanced", str(out_dir),
+            ]
+            subprocess.run(cmd, cwd=str(unise_dir), check=True)
+        finally:
+            # Clean up the patched copy if we created one.
+            if patched_test_script != test_script and patched_test_script.exists():
+                patched_test_script.unlink()
 
         enhanced_files = sorted(out_dir.glob("*.wav"))
         if not enhanced_files:

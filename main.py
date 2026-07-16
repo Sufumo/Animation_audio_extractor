@@ -23,6 +23,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.task_state import TaskState
 from src.pipeline.stage1_data_cleaning import run_stage1
 from src.pipeline.stage2_speaker_extraction import run_stage2
+from src.audio_utils import cut_segment
 
 
 def load_config(config_path: str | Path) -> Dict[str, Any]:
@@ -157,15 +158,54 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-resume", action="store_false", dest="resume",
                         help="Do not resume; re-run all enabled stages")
     parser.add_argument("--test-local", action="store_true",
-                        help="Run local smoke test with configs/test_local.yaml")
+                        help="Run fast local smoke test (mp4_to_wav only)")
+    parser.add_argument("--test-local-full", action="store_true",
+                        help="Run extended local test: BGM removal + UniSE TSE")
+    parser.add_argument("--test-trim-seconds", type=float, default=30.0,
+                        help="When using --test-local-full, trim test.mp4 to first N seconds")
     return parser
+
+
+def _prepare_local_test_source(trim_seconds: Optional[float] = None) -> Path:
+    """Copy/trim test.mp4 into a clean source directory for local testing."""
+    test_source_dir = Path("/Users/AITraining/Documents/Personal/train_audio_extract/data/anime_pipeline_test_source")
+    test_source_dir.mkdir(parents=True, exist_ok=True)
+    test_mp4 = Path("/Users/AITraining/Documents/Personal/train_audio_extract/data/test.mp4")
+    if not test_mp4.exists():
+        raise FileNotFoundError(f"Local test file not found: {test_mp4}")
+
+    target = test_source_dir / "test.mp4"
+    if trim_seconds and trim_seconds > 0:
+        cut_segment(test_mp4, target, 0.0, trim_seconds)
+        print(f"[main] Trimmed test.mp4 to first {trim_seconds}s for local test.")
+    else:
+        if not target.exists():
+            import shutil
+            shutil.copy(str(test_mp4), str(target))
+    return test_source_dir
+
+
+def _prepare_local_test_reference() -> Path:
+    """Copy reference.wav into its own directory for local testing."""
+    ref_dir = Path("/Users/AITraining/Documents/Personal/train_audio_extract/data/anime_pipeline_test_reference")
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    ref_src = Path("/Users/AITraining/Documents/Personal/train_audio_extract/data/reference.wav")
+    if not ref_src.exists():
+        raise FileNotFoundError(f"Local reference file not found: {ref_src}")
+    ref_dst = ref_dir / "reference.wav"
+    if not ref_dst.exists():
+        import shutil
+        shutil.copy(str(ref_src), str(ref_dst))
+    return ref_dir
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.test_local:
+    if args.test_local_full:
+        args.config = "configs/test_local_full.yaml"
+    elif args.test_local:
         args.config = "configs/test_local.yaml"
 
     config_path = Path(args.config)
@@ -176,18 +216,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     config["config_path"] = str(config_path)
 
     # For local smoke test, prepare a source folder containing only test.mp4.
-    if args.test_local:
-        test_source_dir = Path("/Users/AITraining/Documents/Personal/train_audio_extract/data/anime_pipeline_test_source")
-        test_source_dir.mkdir(parents=True, exist_ok=True)
-        test_mp4 = Path("/Users/AITraining/Documents/Personal/train_audio_extract/data/test.mp4")
-        if not test_mp4.exists():
-            print(f"[main] Local test file not found: {test_mp4}", file=sys.stderr)
+    if args.test_local or args.test_local_full:
+        try:
+            trim = args.test_trim_seconds if args.test_local_full else None
+            test_source_dir = _prepare_local_test_source(trim_seconds=trim)
+        except FileNotFoundError as e:
+            print(f"[main] {e}", file=sys.stderr)
             return 1
-        target = test_source_dir / "test.mp4"
-        if not target.exists():
-            import shutil
-            shutil.copy(str(test_mp4), str(target))
         config["source_dir"] = str(test_source_dir)
+        if args.test_local_full:
+            try:
+                ref_dir = _prepare_local_test_reference()
+                config["reference_dir"] = str(ref_dir)
+            except FileNotFoundError as e:
+                print(f"[main] {e}", file=sys.stderr)
+                return 1
         if not config.get("task_dir"):
             config["task_dir"] = "/Users/AITraining/Documents/Personal/train_audio_extract/data/anime_pipeline_test"
 

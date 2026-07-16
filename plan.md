@@ -198,9 +198,23 @@
 - [x] 运行全部单元测试（21 项通过）
 - [x] 完善 `README.md` 与使用示例
 
+### 11. 增强本地测试（BGM 去除 + UniSE TSE）
+- [x] 在 `main.py` 中添加 `--test-local-full` 与 `--test-trim-seconds` 参数
+- [x] `--test-local-full` 自动截取 `test.mp4` 前 N 秒并准备独立 source/reference 目录
+- [x] 创建 `configs/test_local_full.yaml`，启用 `mp4_to_wav` + `bgm_removal` + `unise_tse_v1`
+- [x] 修复 `unise_tse.py` 以兼容 PyTorch 2.6+（自动注入 `weights_only=False`）
+- [x] 修复 `stage2_speaker_extraction.py`，允许 Stage 2 只运行部分组件后直接输出
+- [x] 运行 `--test-local-full --test-trim-seconds 10` 成功产出：
+  - `output/stage1/03_cleaned/test_cleaned.wav`
+  - `output/stage2/episode_000/ep000_tse_v1.wav`
+
 **产出文件**：
+- `configs/test_local_full.yaml`
+- 更新后的 `main.py`
+- 更新后的 `src/pipeline/components/unise_tse.py`
+- 更新后的 `src/pipeline/stage2_speaker_extraction.py`
+- 更新后的 `README.md`
 - 测试日志
-- 更新后的文档
 
 ---
 
@@ -215,6 +229,7 @@
 | ASR + 说话人分离 | 阿里云 `qwen3-asr-flash-filetrans` | 支持长音频、说话人分离、临时 OSS |
 | SRT 清洗 | Qwen 3.6-max | 大模型可理解语义并过滤无意义片段 |
 | 断点续跑 | 任务文件夹内 `task_state.yaml` | 简单可靠，便于人工检查 |
+| UniSE checkpoint 文件名 | 默认使用 `models/unise.ckpt` | 某些环境会自动删除 `epoch=...ckpt` 文件名 |
 
 ---
 
@@ -225,12 +240,14 @@
 3. **阿里云 API 费用**：长音频 ASR 和多次 Qwen 调用可能产生费用，需在文档中提示。
 4. **音频质量要求**：除背景音乐消除外，其余步骤必须避免重采样/重编码；已规定使用 copy 或 PCM。
 5. **二次 UniSE 默认关闭**：根据用户要求，最后一步可选，默认不执行。
+6. **UniSE checkpoint 文件名**：观察到某些情况下 `epoch=20-step-109367.ckpt` 会被自动删除/不可见，已默认改用 `unise.ckpt`。
 
 ---
 
 ## 完成定义
 
 - [x] `main.py` 可运行本地测试并产出预期输出
+- [x] `main.py --test-local-full` 可运行 BGM 去除 + UniSE TSE 并产出预期输出
 - [x] `scripts/convert_anime_to_dataset.py` 可独立运行
 - [x] `anime_voice_training.ipynb` 可在 Colab 环境中运行
 - [x] 所有组件在主配置中可拆卸
