@@ -1,0 +1,47 @@
+# Local test configuration using test.mp4.
+# This mode limits processing to a short audio segment and disables heavy
+# cloud/ML steps so the pipeline can be validated quickly.
+
+source_dir: null
+oped_dir: null
+reference_dir: null  # Not used in local smoke test for Stage 2
+
+task_dir: null
+
+# Only run Stage 1 for smoke test; Stage 2 requires reference audio + Aliyun API key.
+stage1:
+  enabled: true
+  components:
+    - mp4_to_wav
+    # - oped_removal  # disabled unless oped_dir provided
+    # - bgm_removal   # disabled in smoke test because it is slow
+  sample_rate: 44100
+  mono: false
+  bit_depth: 16
+  bgm_segment_seconds: 360.0
+  keep_instrumental: false
+
+stage2:
+  enabled: false
+  components: []
+  segment_seconds: 360.0
+  asr_speaker_count: null
+  srt_model: "qwen3.6-max"
+  run_unise_v2: false
+
+melband_roformer:
+  project_dir: "/Users/AITraining/Documents/Personal/train_audio_extract/plugins/Mel-Band-Roformer-Vocal-Model"
+  model_path: "/Users/AITraining/Documents/Personal/train_audio_extract/models/MelBandRoformer.ckpt"
+  config_path: null
+
+unise:
+  project_dir: "/Users/AITraining/Documents/Personal/train_audio_extract/plugins/unified-audio/QuarkAudio-UniSE"
+  ckpt_path: "/Users/AITraining/Documents/Personal/train_audio_extract/plugins/unified-audio/QuarkAudio-UniSE/checkpoints/epoch=20-step=109367.ckpt"
+  accelerator: "auto"
+  devices: 1
+
+aliyun:
+  dashscope_api_key: null
+
+resume: true
+output_dir: "output"

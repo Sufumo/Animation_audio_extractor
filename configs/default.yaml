@@ -1,0 +1,56 @@
+# Default configuration for anime voice training pipeline.
+
+# Input directories
+source_dir: null        # Animation episodes (MP4/MP3/WAV)
+oped_dir: null          # OP/ED audio files to remove
+reference_dir: null     # Target speaker reference audio
+
+# Task folder for checkpointing
+task_dir: null
+
+# Stage 1 settings
+stage1:
+  enabled: true
+  components:
+    - mp4_to_wav
+    - oped_removal
+    - bgm_removal
+  sample_rate: 44100
+  mono: false
+  bit_depth: 16
+  bgm_segment_seconds: 360.0
+  keep_instrumental: false
+
+# Stage 2 settings
+stage2:
+  enabled: true
+  components:
+    - unise_tse_v1
+    - silence_removal
+    - aliyun_asr
+    - srt_cleaning
+    - rebuild_clips
+  segment_seconds: 360.0
+  asr_speaker_count: null
+  srt_model: "qwen3.6-max"
+  run_unise_v2: false
+
+# External tool paths
+melband_roformer:
+  project_dir: "/Users/AITraining/Documents/Personal/train_audio_extract/plugins/Mel-Band-Roformer-Vocal-Model"
+  model_path: "/Users/AITraining/Documents/Personal/train_audio_extract/models/MelBandRoformer.ckpt"
+  config_path: null
+
+unise:
+  project_dir: "/Users/AITraining/Documents/Personal/train_audio_extract/plugins/unified-audio/QuarkAudio-UniSE"
+  ckpt_path: "/Users/AITraining/Documents/Personal/train_audio_extract/plugins/unified-audio/QuarkAudio-UniSE/checkpoints/epoch=20-step=109367.ckpt"
+  accelerator: "auto"
+  devices: 1
+
+# Aliyun
+aliyun:
+  dashscope_api_key: null  # If null, reads DASHSCOPE_API_KEY env var
+
+# Pipeline behavior
+resume: true
+output_dir: "output"

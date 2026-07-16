@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.log
+
+# Virtual environments
+venv/
+.env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Task outputs / temporary data
+output/
+*.task/
+temp/
+tmp/
+*.wav
+*.mp3
+*.mp4
+*.srt
+*.json
+
+# Keep config files
+!configs/*.yaml
+!configs/*.yml
