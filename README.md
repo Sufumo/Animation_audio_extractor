@@ -127,7 +127,16 @@ python scripts/convert_anime_to_dataset.py \
 
 ## Google Colab
 
-Open `anime_voice_training.ipynb` in Colab, replace `GITHUB_REPO_URL` with your fork, and run all cells.
+Open `anime_voice_training.ipynb` in Colab and run all cells. The notebook expects your data in Google Drive at `MyDrive/UniSE/data`:
+
+```
+MyDrive/UniSE/data/
+├── source/           # episode MP4/MP3 files
+├── oped/             # OP/ED audio files (optional)
+└── reference/        # target speaker reference audio
+```
+
+Set `DASHSCOPE_API_KEY` in the notebook if you want Stage 2 ASR + SRT cleaning. Stage 1 (data cleaning) and the UniSE target-speaker extraction step do not require cloud API keys.
 
 ## Configuration
 
