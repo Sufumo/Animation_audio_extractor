@@ -72,7 +72,7 @@ pip install -r requirements.txt
 
 ```
 my_data/
-├── source/           # episode MP4/MP3 files
+├── animations/       # episode MP4/MP3/WAV files
 ├── oped/             # OP/ED audio files (optional)
 └── reference/        # target speaker reference audio
 ```
@@ -83,7 +83,7 @@ my_data/
 python main.py \
     --config configs/default.yaml \
     --task-dir ./my_task \
-    --source-dir ./my_data/source \
+    --source-dir ./my_data/animations \
     --oped-dir ./my_data/oped \
     --reference-dir ./my_data/reference \
     --stage all
@@ -119,7 +119,7 @@ python main.py --test-local-full --test-trim-seconds 10
 
 ```bash
 python scripts/convert_anime_to_dataset.py \
-    --source-dir ./my_data/source \
+    --source-dir ./my_data/animations \
     --oped-dir ./my_data/oped \
     --reference-dir ./my_data/reference \
     --output-dir ./my_output
@@ -131,7 +131,7 @@ Open `anime_voice_training.ipynb` in Colab and run all cells. The notebook expec
 
 ```
 MyDrive/UniSE/data/
-├── source/           # episode MP4/MP3 files
+├── animations/       # episode MP4/MP3/WAV files
 ├── oped/             # OP/ED audio files (optional)
 └── reference/        # target speaker reference audio
 ```

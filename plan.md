@@ -14,7 +14,7 @@
 | Stage 2 | 说话人提取 | UniSE TSE 初提取 → 静音去除 → 阿里云 ASR 说话人分离 → Qwen 清洗 SRT → 二次映射回原始音频 → 可选二次 UniSE |
 
 **输入类型**：
-1. `source/`：动画源文件（多集 MP4 或 MP3）
+1. `animations/`：动画源文件（多集 MP4 / MP3 / WAV）
 2. `oped/`：动画 OP/ED 等需要识别并去除的音频
 3. `reference/`：目标角色参考音频（用于 UniSE TSE）
 
