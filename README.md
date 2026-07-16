@@ -136,6 +136,8 @@ MyDrive/UniSE/data/
 └── reference/        # target speaker reference audio
 ```
 
+The notebook tries to download the UniSE checkpoint from HuggingFace. If that fails, upload your local `unise.ckpt` to `MyDrive/UniSE/models/unise.ckpt` and re-run the model-download cell.
+
 Set `DASHSCOPE_API_KEY` in the notebook if you want Stage 2 ASR + SRT cleaning. Stage 1 (data cleaning) and the UniSE target-speaker extraction step do not require cloud API keys.
 
 ## Configuration
