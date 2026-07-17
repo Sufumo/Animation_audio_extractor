@@ -40,6 +40,15 @@ def _get_compatible_test_script(unise_dir: Path, tmp_dir: Path) -> Path:
     if "weights_only=False" in source:
         return original
 
+    # Only patch when PyTorch >= 2.6, where torch.load defaults to weights_only=True.
+    try:
+        import torch
+        major, minor, *_ = torch.__version__.split(".")
+        if int(major) < 2 or (int(major) == 2 and int(minor) < 6):
+            return original
+    except Exception:
+        return original
+
     # Match the trainer.test call and inject weights_only=False.
     pattern = r"(trainer\.test\([^)]+ckpt_path=config\['ckpt_path'\])\)"
     replacement = r"\1, weights_only=False)"
