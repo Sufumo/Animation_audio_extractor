@@ -1,3 +1,7 @@
+# Legacy Stage 2: Aliyun ASR diarization + SRT cleaning (+ optional pyannote speaker_verify).
+# Use when you need the original cloud diarization path:
+#   python main.py --config configs/legacy_aliyun.yaml ...
+
 source_dir: null
 oped_dir: null
 reference_dir: null
@@ -15,36 +19,23 @@ stage1:
   keep_instrumental: false
 stage2:
   enabled: true
-  # Primary: v2 (VAD + ECAPA). Fallback: set mode to aliyun / v1
-  mode: v2
+  mode: aliyun
   components:
   - unise_tse_v1
-  - vad_segments
+  - silence_removal
+  - aliyun_asr
   - speaker_verify
-  - quality_gate
-  - clip_asr
+  - srt_cleaning
+  - rebuild_clips
   - merge_output
   segment_seconds: 360.0
-  clip_padding_sec: 0.1
-  min_clip_duration_sec: 1.5
-  max_clip_duration_sec: 12.0
-  merge_gap_sec: 2.0
-  # VAD
-  vad_method: auto
-  vad_top_db: 35.0
-  vad_min_silence_sec: 0.3
-  # ECAPA speaker verification
-  speaker_threshold: 0.45
-  speaker_backend: ecapa
-  speaker_device: cpu
-  normalize_loudness: true
-  target_lufs: -23.0
-  skip_asr: false
-  # Legacy Aliyun fields (used when mode=aliyun)
   asr_speaker_count: 2
   srt_model: qwen3.6-max
   run_unise_v2: false
   asr_gap_sec: 2.0
+  clip_padding_sec: 0.15
+  min_clip_duration_sec: 0.1
+  merge_gap_sec: 2.0
   speaker_embedding_model: pyannote/wespeaker-voxceleb-resnet34-LM
   speaker_verify_samples: 8
 melband_roformer:

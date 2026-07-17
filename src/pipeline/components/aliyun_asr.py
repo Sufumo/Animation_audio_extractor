@@ -21,15 +21,20 @@ def _ms_to_srt_time(ms: int) -> str:
 def sentences_to_srt(sentences: List[Dict[str, Any]]) -> str:
     """Convert transcription sentences to SRT format."""
     lines: List[str] = []
-    for i, s in enumerate(sentences, 1):
+    idx = 1
+    for s in sentences:
         text = s.get("text", "") or ""
         begin = int(s.get("begin_time") or 0)
         end = int(s.get("end_time") or begin)
+        # Skip zero-duration entries (begin == end) which cause ffmpeg errors.
+        if end <= begin:
+            continue
         speaker = s.get("speaker_id", "unknown")
-        lines.append(str(i))
+        lines.append(str(idx))
         lines.append(f"{_ms_to_srt_time(begin)} --> {_ms_to_srt_time(end)}")
         lines.append(f"[{speaker}] {text.strip()}")
         lines.append("")
+        idx += 1
     return "\n".join(lines).strip()
 
 

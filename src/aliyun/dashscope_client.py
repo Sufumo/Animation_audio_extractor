@@ -16,7 +16,7 @@ import requests
 
 DASHSCOPE_API_V1 = "https://dashscope.aliyuncs.com/api/v1"
 BASE_URL_V1 = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-ASR_FILE_MODEL = "qwen3-asr-flash-filetrans"
+ASR_FILE_MODEL = "paraformer-v2"
 DEFAULT_CHAT_MODEL = "qwen-plus"
 
 
@@ -78,11 +78,17 @@ def create_filetrans_task(
     if speaker_count is not None:
         parameters["speaker_count"] = speaker_count
 
-    payload = {
+    payload: Dict[str, Any] = {
         "model": ASR_FILE_MODEL,
-        "input": {"file_url": file_url},
         "parameters": parameters,
     }
+    # paraformer-v2 and fun-asr models require file_urls array.
+    # qwen3-asr-flash-filetrans uses file_url string.
+    if ASR_FILE_MODEL in ("paraformer-v2", "fun-asr"):
+        payload["input"] = {"file_urls": [file_url]}
+    else:
+        payload["input"] = {"file_url": file_url}
+
     r = requests.post(url, headers=headers, json=payload, timeout=60)
     r.raise_for_status()
     data = r.json()
@@ -162,6 +168,13 @@ def run_filetrans(
     transcription_url = output.get("transcription_url") or (
         (output.get("result") or {}).get("transcription_url")
     )
+    # paraformer-v2 returns results array with transcription_url inside.
+    if not transcription_url:
+        results = output.get("results", [])
+        if results:
+            transcription_url = results[0].get("transcription_url") or (
+                (results[0].get("output") or {}).get("transcription_url")
+            )
     if transcription_url:
         sentences, plain_text = fetch_transcription_result(transcription_url)
     else:

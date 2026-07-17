@@ -1,52 +1,38 @@
-source_dir: null
+# Local smoke test: reuse test/task cache (v2 mode). No UniSE / Mel-Band.
+
+source_dir: /Users/AITraining/Documents/Personal/train_audio_extract/data/anime_pipeline_v2_cache_source
 oped_dir: null
-reference_dir: null
-task_dir: null
+reference_dir: /Users/AITraining/Documents/Personal/train_audio_extract/data/anime_pipeline_test_reference
+task_dir: /Users/AITraining/Documents/Personal/train_audio_extract/data/anime_pipeline_v2_cache_test
 stage1:
-  enabled: true
-  components:
-  - mp4_to_wav
-  - oped_removal
-  - bgm_removal
-  sample_rate: 44100
-  mono: false
-  bit_depth: 16
-  bgm_segment_seconds: 360.0
-  keep_instrumental: false
+  enabled: false
+  components: []
 stage2:
   enabled: true
-  # Primary: v2 (VAD + ECAPA). Fallback: set mode to aliyun / v1
   mode: v2
   components:
   - unise_tse_v1
   - vad_segments
   - speaker_verify
   - quality_gate
-  - clip_asr
   - merge_output
   segment_seconds: 360.0
   clip_padding_sec: 0.1
-  min_clip_duration_sec: 1.5
+  min_clip_duration_sec: 1.0
   max_clip_duration_sec: 12.0
-  merge_gap_sec: 2.0
-  # VAD
-  vad_method: auto
+  merge_gap_sec: 1.0
+  vad_method: energy
   vad_top_db: 35.0
   vad_min_silence_sec: 0.3
-  # ECAPA speaker verification
-  speaker_threshold: 0.45
+  speaker_threshold: 0.30
   speaker_backend: ecapa
   speaker_device: cpu
   normalize_loudness: true
   target_lufs: -23.0
-  skip_asr: false
-  # Legacy Aliyun fields (used when mode=aliyun)
-  asr_speaker_count: 2
-  srt_model: qwen3.6-max
-  run_unise_v2: false
-  asr_gap_sec: 2.0
-  speaker_embedding_model: pyannote/wespeaker-voxceleb-resnet34-LM
-  speaker_verify_samples: 8
+  skip_asr: true
+cache:
+  cleaned_wav: /Users/AITraining/Documents/Personal/train_audio_extract/test/task/stage1/03_cleaned/test_no_oped_cleaned.wav
+  tse_wav: /Users/AITraining/Documents/Personal/train_audio_extract/test/task/stage2/ep000_tse_v1.wav
 melband_roformer:
   project_dir: /Users/AITraining/Documents/Personal/train_audio_extract/plugins/Mel-Band-Roformer-Vocal-Model
   model_path: /Users/AITraining/Documents/Personal/train_audio_extract/models/MelBandRoformer.ckpt
@@ -58,5 +44,5 @@ unise:
   devices: 1
 aliyun:
   dashscope_api_key: null
-resume: true
+resume: false
 output_dir: output

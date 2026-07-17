@@ -1,168 +1,99 @@
 # Anime Voice Training Pipeline
 
-A pluggable, resumable pipeline that converts animation episodes into a high-quality target-speaker voice training dataset.
+从动漫剧集提取单一目标角色语音训练数据的可插拔、可断点续传流水线。
+
+## Stage 2 双模式
+
+| mode | 说明 | 配置 |
+|------|------|------|
+| **`v2`（默认）** | UniSE → VAD 分句 → ECAPA 声纹过滤 → 质量门控 → 可选逐 clip ASR | `configs/default.yaml` |
+| **`aliyun` / `v1`（备选）** | UniSE → 拼接 ASR 输入 → 阿里云 diarization → SRT 清洗 → 回传切分 | `configs/legacy_aliyun.yaml` |
+
+切换方式：
+
+```bash
+# 默认 v2
+python main.py --config configs/default.yaml --stage all ...
+
+# 强制阿里云备选
+python main.py --config configs/legacy_aliyun.yaml --stage all ...
+# 或
+python main.py --config configs/default.yaml --mode aliyun --stage all ...
+```
 
 ## Features
 
-- **Two-stage pipeline**
-  - Stage 1: Data cleaning — MP4/MP3 → WAV, OP/ED removal, background-music removal.
-  - Stage 2: Speaker extraction — UniSE TSE, silence removal with position mapping, Aliyun ASR speaker diarization, Qwen SRT cleaning, reverse mapping to original audio.
-- **Pluggable components**: enable/disable any step via YAML config.
-- **Resumable**: each task folder stores `task_state.yaml`; re-run and only pending/failed steps execute.
-- **High-quality audio handling**: ffmpeg-based conversion/split/merge, prefers stream copy to avoid extra loss.
-- **OOM-safe**: long audio is chunked before heavy models (UniSE, Mel-Band-Roformer).
+- Stage 1：转 WAV、去 OP/ED、Mel-Band 去 BGM
+- Stage 2 v2：VAD 分句 + 声纹验证（不依赖 ASR 说话人标签）
+- Stage 2 legacy：阿里云 paraformer diarization（保留对照）
+- 组件可开关、`task_state.yaml` 断点续传、长音频分块防 OOM
 
 ## Project Structure
 
 ```
 .
-├── main.py                           # Main orchestrator
-├── anime_voice_training.ipynb        # Colab notebook
-├── scripts/convert_anime_to_dataset.py  # Standalone conversion script
+├── main.py
+├── anime_voice_training.ipynb      # Colab：legacy Aliyun
+├── anime_voice_training_v2.ipynb   # Colab：v2 首选（共用同一 Drive 数据目录）
 ├── configs/
-│   ├── default.yaml                  # Default config
-│   └── test_local.yaml               # Local smoke-test config
-├── src/
-│   ├── task_state.py                 # YAML checkpoint manager
-│   ├── audio_utils.py                # ffmpeg audio utilities
-│   ├── aliyun/dashscope_client.py    # Aliyun DashScope client
-│   └── pipeline/
-│       ├── stage1_data_cleaning.py
-│       ├── stage2_speaker_extraction.py
-│       └── components/
-│           ├── mp4_to_wav.py
-│           ├── oped_removal.py
-│           ├── bgm_removal.py
-│           ├── unise_tse.py
-│           ├── silence_removal.py
-│           ├── audio_mapping.py
-│           ├── aliyun_asr.py
-│           └── srt_cleaning.py
-├── tests/                            # Unit tests
-└── plan.md                           # Execution plan / status
-```
-
-## Requirements
-
-- Python 3.10+
-- ffmpeg
-- `DASHSCOPE_API_KEY` environment variable for Aliyun ASR / Qwen chat
-- Mel-Band-Roformer project + checkpoint for BGM removal
-- unified-audio/QuarkAudio-UniSE project + checkpoint for speaker extraction
-
-Install core dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Install tool-specific dependencies in their own directories:
-
-```bash
-cd /path/to/Mel-Band-Roformer-Vocal-Model
-pip install -r requirements.txt
-
-cd /path/to/unified-audio/QuarkAudio-UniSE
-pip install -r requirements.txt
+│   ├── default.yaml                # mode: v2
+│   ├── legacy_aliyun.yaml          # mode: aliyun
+│   └── test_from_cache.yaml        # 本地用 test/task 缓存冒烟
+├── src/pipeline/
+│   ├── stage2_speaker_extraction.py  # 分发器
+│   ├── stage2_vad_verify.py          # v2 实现
+│   ├── stage2_aliyun.py              # 阿里云备选
+│   └── components/
+│       ├── vad_detection.py
+│       ├── speaker_verification.py   # ECAPA / MFCC
+│       ├── quality_gate.py
+│       ├── clip_asr.py
+│       ├── speaker_verify.py         # legacy pyannote（阿里云路径）
+│       └── ...
 ```
 
 ## Quick Start
 
-### 1. Prepare inputs
-
-```
-my_data/
-├── animations/       # episode MP4/MP3/WAV files
-├── oped/             # OP/ED audio files (optional)
-└── reference/        # target speaker reference audio
-```
-
-### 2. Run the pipeline
-
 ```bash
+pip install -r requirements.txt
+
 python main.py \
-    --config configs/default.yaml \
-    --task-dir ./my_task \
-    --source-dir ./my_data/animations \
-    --oped-dir ./my_data/oped \
-    --reference-dir ./my_data/reference \
-    --stage all
+  --config configs/default.yaml \
+  --task-dir ./my_task \
+  --source-dir ./my_data/animations \
+  --oped-dir ./my_data/oped \
+  --reference-dir ./my_data/reference \
+  --stage all
 ```
 
-### 3. Resume a failed run
+本地低算力（复用 `test/task` 的 TSE/cleaned）：
 
 ```bash
-python main.py --task-dir ./my_task --stage all
+python main.py --test-from-cache --test-trim-seconds 60
 ```
 
-## Local Smoke Test
+## Google Colab（共用 Drive 结构）
 
-A fast local test that only converts `data/test.mp4` to WAV:
-
-```bash
-python main.py --test-local
-```
-
-An extended local test that trims `test.mp4` to the first N seconds and runs **BGM removal + UniSE target speaker extraction** (no cloud ASR):
-
-```bash
-# default trim is 30 seconds
-python main.py --test-local-full
-
-# custom trim length
-python main.py --test-local-full --test-trim-seconds 10
-```
-
-**Note on UniSE checkpoint:** Some systems or cleanup tools may delete files named `epoch=...ckpt`. If that happens, rename the UniSE checkpoint to `unise.ckpt` and update `configs/default.yaml` accordingly.
-
-## Standalone Script
-
-```bash
-python scripts/convert_anime_to_dataset.py \
-    --source-dir ./my_data/animations \
-    --oped-dir ./my_data/oped \
-    --reference-dir ./my_data/reference \
-    --output-dir ./my_output
-```
-
-## Google Colab
-
-Open `anime_voice_training.ipynb` in Colab and run all cells. The notebook expects your data in Google Drive at `MyDrive/UniSE/data`:
+两个 notebook **共用**同一套 Drive 路径，无需新建数据目录：
 
 ```
-MyDrive/UniSE/data/
-├── animations/       # episode MP4/MP3/WAV files
-├── oped/             # OP/ED audio files (optional)
-└── reference/        # target speaker reference audio
+MyDrive/UniSE/data/{animations,oped,reference}
+MyDrive/UniSE/models/unise.ckpt
+MyDrive/UniSE/output
 ```
 
-The notebook tries to download the UniSE checkpoint from HuggingFace. If that fails, upload your local `unise.ckpt` to `MyDrive/UniSE/models/unise.ckpt` and re-run the model-download cell.
+| Notebook | Stage2 |
+|----------|--------|
+| `anime_voice_training.ipynb` | legacy Aliyun（会强制 `mode: aliyun`） |
+| `anime_voice_training_v2.ipynb` | v2 首选 |
 
-Set `DASHSCOPE_API_KEY` in the notebook if you want Stage 2 ASR + SRT cleaning. Stage 1 (data cleaning) and the UniSE target-speaker extraction step do not require cloud API keys.
-
-## Configuration
-
-Key settings in `configs/default.yaml`:
-
-| Setting | Description |
-|---------|-------------|
-| `stage1.components` | Enabled cleaning steps |
-| `stage2.components` | Enabled speaker-extraction steps |
-| `stage2.run_unise_v2` | Run a second UniSE pass on final clips (default false) |
-| `melband_roformer.*` | Paths to Mel-Band-Roformer project and checkpoint |
-| `unise.*` | Paths to UniSE project and checkpoint |
-| `aliyun.dashscope_api_key` | API key (or use `DASHSCOPE_API_KEY` env var) |
+Colab 本地工作目录不同（`/content/anime_voice_training` vs `_v2`），避免互相覆盖运行缓存；结果都写回 `MyDrive/UniSE/output`。
 
 ## Tests
 
 ```bash
-pytest tests/
+pytest tests/test_stage2_v2.py tests/test_audio_utils.py -q
 ```
-
-## Notes
-
-- Audio quality: all internal split/merge operations prefer stream copy or PCM WAV. Background-music removal is the only lossy step and is considered acceptable.
-- Cloud costs: Aliyun ASR and Qwen calls may incur charges; process long audio in single-episode segments to reduce repeated speaker mis-identification.
 
 ## License
 

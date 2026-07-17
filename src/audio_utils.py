@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -55,6 +56,15 @@ def get_duration(path: str | Path) -> float:
     if duration is None:
         raise RuntimeError(f"Could not determine duration for {path}")
     return float(duration)
+
+
+def get_audio_channels(path: str | Path) -> int:
+    """Return audio channel count, or 1 if no audio stream found."""
+    info = _run_ffprobe(path)
+    for stream in info.get("streams", []):
+        if stream.get("codec_type") == "audio":
+            return int(stream.get("channels", 1))
+    return 1
 
 
 def get_audio_sample_rate(path: str | Path) -> int:
@@ -201,6 +211,64 @@ def merge_audio(
     return output_path
 
 
+def merge_with_gaps(
+    clip_paths: List[str | Path],
+    output_path: str | Path,
+    gap_sec: float = 0.5,
+) -> Path:
+    """Merge clips into a single audio file with silence gaps between them.
+
+    Automatically detects the format of the first clip and generates matching
+    silence gaps (same sample rate, channels, codec).
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    clip_paths = [Path(p) for p in clip_paths]
+    if not clip_paths:
+        raise ValueError("clip_paths is empty")
+
+    # Detect format from first clip.
+    first_info = _run_ffprobe(clip_paths[0])
+    audio_stream = next(
+        (s for s in first_info.get("streams", []) if s.get("codec_type") == "audio"), None
+    )
+    if audio_stream is None:
+        raise RuntimeError(f"No audio stream in {clip_paths[0]}")
+
+    sample_rate = int(audio_stream.get("sample_rate", 44100))
+    channels = int(audio_stream.get("channels", 2))
+    layout = "stereo" if channels >= 2 else "mono"
+
+    # Build concat list with silence gaps.
+    temp_dir = output_path.parent / ".merge_gaps_tmp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Create silence gap file.
+        silence_path = temp_dir / "silence_gap.wav"
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", f"anullsrc=r={sample_rate}:cl={layout}",
+            "-t", str(gap_sec),
+            "-acodec", "pcm_s16le",
+            str(silence_path),
+        ], capture_output=True, check=True)
+
+        # Build ordered list: clip0, silence, clip1, silence, ..., clipN.
+        concat_entries: List[Path] = []
+        for idx, clip in enumerate(clip_paths):
+            concat_entries.append(clip)
+            if idx < len(clip_paths) - 1:
+                concat_entries.append(silence_path)
+
+        merge_audio(concat_entries, output_path, concat_with_copy=True)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    return output_path
+
+
 def resample(
     input_path: str | Path,
     output_path: str | Path,
@@ -296,9 +364,11 @@ __all__ = [
     "get_media_info",
     "get_duration",
     "get_audio_sample_rate",
+    "get_audio_channels",
     "convert_to_wav",
     "split_audio",
     "merge_audio",
+    "merge_with_gaps",
     "resample",
     "cut_segment",
     "apply_gain",

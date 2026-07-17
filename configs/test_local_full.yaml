@@ -20,6 +20,10 @@ stage2:
   asr_speaker_count: null
   srt_model: qwen3.6-max
   run_unise_v2: false
+  asr_gap_sec: 2.0
+  clip_padding_sec: 0.15
+  min_clip_duration_sec: 0.1
+  merge_gap_sec: 2.0
 melband_roformer:
   project_dir: /Users/AITraining/Documents/Personal/train_audio_extract/plugins/Mel-Band-Roformer-Vocal-Model
   model_path: /Users/AITraining/Documents/Personal/train_audio_extract/models/MelBandRoformer.ckpt

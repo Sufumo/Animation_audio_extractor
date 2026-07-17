@@ -79,6 +79,11 @@ def find_main_speaker(entries: List[Dict[str, Any]]) -> str:
     return max(speaker_time.items(), key=lambda x: x[1])[0]
 
 
+def all_speakers_unknown(entries: List[Dict[str, Any]]) -> bool:
+    """Check if all entries have unknown speaker (diarization failed)."""
+    return all(e["speaker"] == "unknown" for e in entries)
+
+
 def is_meaningless(text: str) -> bool:
     """Heuristic: detect pure filler utterances."""
     cleaned = re.sub(r"[^一-龥a-zA-Z0-9]", "", text)
@@ -95,11 +100,16 @@ def clean_srt(
     output_srt_path: Optional[str | Path] = None,
     model: str = DEFAULT_MODEL,
     use_llm: bool = True,
+    main_speaker: Optional[str] = None,
 ) -> str:
     """Clean an SRT file and return the cleaned SRT text.
 
     When `use_llm` is True, the full SRT is sent to Qwen 3.6-max for semantic
     cleaning. The local heuristics are always applied afterwards as a safety net.
+
+    Args:
+        main_speaker: Optional override for the target speaker id. When omitted,
+            falls back to the longest-duration speaker heuristic.
     """
     input_srt_path = Path(input_srt_path)
     srt_text = input_srt_path.read_text(encoding="utf-8")
@@ -108,7 +118,10 @@ def clean_srt(
     if not entries:
         cleaned_text = srt_text
     else:
-        main_speaker = find_main_speaker(entries)
+        if main_speaker is None:
+            main_speaker = find_main_speaker(entries)
+        # When diarization fails (all unknown), skip speaker filtering and keep all entries.
+        skip_speaker_filter = all_speakers_unknown(entries)
 
         if use_llm:
             system_prompt = (
@@ -140,10 +153,14 @@ def clean_srt(
 
         # Fallback / safety net: apply local filters.
         if not cleaned_entries:
-            cleaned_entries = [
-                e for e in entries
-                if e["speaker"] == main_speaker and not is_meaningless(e["text"])
-            ]
+            if skip_speaker_filter:
+                # Diarization failed: keep all non-meaningless entries.
+                cleaned_entries = [e for e in entries if not is_meaningless(e["text"])]
+            else:
+                cleaned_entries = [
+                    e for e in entries
+                    if e["speaker"] == main_speaker and not is_meaningless(e["text"])
+                ]
         else:
             cleaned_entries = [
                 e for e in cleaned_entries
@@ -170,4 +187,4 @@ def clean_srt(
 # Forward reference helper
 from typing import Any
 
-__all__ = ["parse_srt", "find_main_speaker", "is_meaningless", "clean_srt"]
+__all__ = ["parse_srt", "find_main_speaker", "all_speakers_unknown", "is_meaningless", "clean_srt"]
