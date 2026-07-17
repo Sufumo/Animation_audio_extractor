@@ -153,9 +153,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference-dir", type=str, help="Reference speaker directory")
     parser.add_argument("--stage", type=str, choices=["1", "2", "all"],
                         help="Run only stage 1, stage 2, or all")
-    parser.add_argument("--resume", action="store_true", dest="resume",
+    parser.add_argument("--resume", action="store_true", dest="resume", default=None,
                         help="Resume from existing task state")
-    parser.add_argument("--no-resume", action="store_false", dest="resume",
+    parser.add_argument("--no-resume", action="store_false", dest="resume", default=None,
                         help="Do not resume; re-run all enabled stages")
     parser.add_argument("--test-local", action="store_true",
                         help="Run fast local smoke test (mp4_to_wav only)")
