@@ -18,6 +18,14 @@ import numpy as np
 SUPPORTED_EXTS = {".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg"}
 
 
+def _normalize_device(device: str) -> str:
+    """SpeechBrain expects 'cuda:0' / 'cpu', not bare 'cuda'."""
+    d = (device or "cpu").strip().lower()
+    if d == "cuda" or d in ("gpu", "cuda0"):
+        return "cuda:0"
+    return device
+
+
 def _collect_audio_files(path: str | Path) -> List[Path]:
     path = Path(path)
     if path.is_file():
@@ -40,17 +48,20 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 # ---------------------------------------------------------------------------
 
 _ECAPA_MODEL = None
+_ECAPA_DEVICE = None
 
 
 def _get_ecapa_model(device: str = "cpu"):
-    global _ECAPA_MODEL
-    if _ECAPA_MODEL is None:
+    global _ECAPA_MODEL, _ECAPA_DEVICE
+    device = _normalize_device(device)
+    if _ECAPA_MODEL is None or _ECAPA_DEVICE != device:
         from speechbrain.inference.speaker import EncoderClassifier
         _ECAPA_MODEL = EncoderClassifier.from_hparams(
             source="speechbrain/spkrec-ecapa-voxceleb",
             savedir="pretrained_models/spkrec-ecapa-voxceleb",
             run_opts={"device": device},
         )
+        _ECAPA_DEVICE = device
     return _ECAPA_MODEL
 
 
@@ -58,15 +69,19 @@ def embed_ecapa(audio_path: str | Path, device: str = "cpu") -> np.ndarray:
     """Extract ECAPA-TDNN embedding for one audio file."""
     import torchaudio
 
+    device = _normalize_device(device)
     model = _get_ecapa_model(device=device)
     signal, sr = torchaudio.load(str(audio_path))
     if sr != 16000:
         signal = torchaudio.functional.resample(signal, sr, 16000)
     if signal.shape[0] > 1:
         signal = signal.mean(dim=0, keepdim=True)
+    try:
+        signal = signal.to(device)
+    except Exception:
+        pass
     emb = model.encode_batch(signal)
     return emb.squeeze().detach().cpu().numpy()
-
 
 def embed_mfcc(audio_path: str | Path, sr: int = 16000) -> np.ndarray:
     """Lightweight MFCC mean+std embedding (offline fallback)."""
@@ -90,6 +105,7 @@ def build_reference_embedding(
     Returns:
         (embedding, used_backend)
     """
+    device = _normalize_device(device)
     paths = [Path(p) for p in reference_paths]
     if not paths:
         raise ValueError("No reference audio provided")
@@ -126,6 +142,7 @@ def score_clip(
     device: str = "cpu",
 ) -> float:
     """Return cosine similarity between clip and reference embedding."""
+    device = _normalize_device(device)
     if backend == "ecapa":
         emb = embed_ecapa(clip_path, device=device)
     else:
@@ -147,6 +164,7 @@ def verify_clips(
     Returns:
         Dict with accepted/rejected lists and per-clip scores.
     """
+    device = _normalize_device(device)
     ref_files = _collect_audio_files(reference_dir)
     if not ref_files:
         raise ValueError(f"No reference audio in {reference_dir}")

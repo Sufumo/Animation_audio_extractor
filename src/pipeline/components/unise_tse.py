@@ -25,22 +25,15 @@ DEFAULT_ENROLL_DURATION = 5.0
 
 
 def _get_compatible_test_script(unise_dir: Path, tmp_dir: Path) -> Path:
-    """Return a PyTorch 2.6+ compatible copy of UniSE test.py placed in unise_dir.
+    """Return UniSE test.py; patch only on PyTorch >= 2.6.
 
-    The copy is placed inside unise_dir so that relative imports (`from model ...`)
-    still work. The original test.py is never modified. The caller should remove
-    the patched file when done.
+    On Colab T4 (typically torch 2.1.x), ``trainer.test(..., weights_only=False)``
+    is unsupported. Always return the upstream script unchanged when torch < 2.6 —
+    do not inspect or adapt source for older builds.
     """
     original = unise_dir / "test.py"
-    # Place patched copy in unise_dir so imports resolve.
-    patched = unise_dir / f"test_patched_{tmp_dir.name}.py"
-    source = original.read_text(encoding="utf-8")
 
-    # If already patched or original already passes weights_only=False, use original.
-    if "weights_only=False" in source:
-        return original
-
-    # Only patch when PyTorch >= 2.6, where torch.load defaults to weights_only=True.
+    # Version gate FIRST — never adapt on torch < 2.6 (e.g. T4 torch 2.1).
     try:
         import torch
         major, minor, *_ = torch.__version__.split(".")
@@ -49,17 +42,24 @@ def _get_compatible_test_script(unise_dir: Path, tmp_dir: Path) -> Path:
     except Exception:
         return original
 
-    # Match the trainer.test call and inject weights_only=False.
+    source = original.read_text(encoding="utf-8")
+    if "weights_only=False" in source:
+        return original
+
+    # PyTorch >= 2.6: torch.load defaults to weights_only=True.
+    patched = unise_dir / f"test_patched_{tmp_dir.name}.py"
     pattern = r"(trainer\.test\([^)]+ckpt_path=config\['ckpt_path'\])\)"
     replacement = r"\1, weights_only=False)"
     new_source = re.sub(pattern, replacement, source)
 
     if "weights_only=False" not in new_source:
-        # Fallback: replace the exact original call.
         new_source = source.replace(
             "trainer.test(model, data_module, ckpt_path=config['ckpt_path'])",
             "trainer.test(model, data_module, ckpt_path=config['ckpt_path'], weights_only=False)",
         )
+
+    if "weights_only=False" not in new_source:
+        return original
 
     patched.write_text(new_source, encoding="utf-8")
     return patched
