@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 import yaml
 
 
@@ -19,6 +20,21 @@ TASK_STATE_FILE = "task_state.yaml"
 
 # Valid status transitions are handled loosely: callers can reset to pending.
 VALID_STATUSES = {"pending", "running", "completed", "failed", "skipped"}
+
+
+def _sanitize_for_yaml(obj: Any) -> Any:
+    """Recursively convert numpy/path objects to plain Python types for safe YAML."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_yaml(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_yaml(v) for v in obj]
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, Path):
+        return str(obj)
+    return obj
 
 
 class TaskState:
@@ -51,12 +67,21 @@ class TaskState:
 
     def _load(self) -> Dict[str, Any]:
         with open(self.state_path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+            content = f.read()
+        try:
+            return yaml.safe_load(content) or {}
+        except yaml.constructor.ConstructorError:
+            # Recover from YAML that previously contained numpy tags.
+            data = yaml.unsafe_load(content) or {}
+            self._data = _sanitize_for_yaml(data)
+            self._save()
+            return self._data
 
     def _save(self) -> None:
         self._data["updated_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+        clean_data = _sanitize_for_yaml(self._data)
         with open(self.state_path, "w", encoding="utf-8") as f:
-            yaml.dump(self._data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            yaml.dump(clean_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
     def _ensure_stage(self, stage: str) -> Dict[str, Any]:
         if stage not in self._data["stages"]:
@@ -83,7 +108,7 @@ class TaskState:
 
     def set_inputs(self, inputs: Dict[str, Any]) -> None:
         """Record input paths or metadata for the task."""
-        self._data["inputs"] = {k: str(v) if isinstance(v, Path) else v for k, v in inputs.items()}
+        self._data["inputs"] = _sanitize_for_yaml(inputs)
         self._save()
 
     def get_inputs(self) -> Dict[str, Any]:
@@ -134,7 +159,7 @@ class TaskState:
             stage_state["completed_at"] = now
             stage_state["error"] = None
             if outputs is not None:
-                stage_state["outputs"].update(outputs)
+                stage_state["outputs"].update(_sanitize_for_yaml(outputs))
         else:
             step_state = stage_state.setdefault("steps", {}).get(step)
             if step_state is None:
@@ -144,7 +169,7 @@ class TaskState:
             step_state["completed_at"] = now
             step_state["error"] = None
             if outputs is not None:
-                step_state["outputs"] = outputs
+                step_state["outputs"] = _sanitize_for_yaml(outputs)
         self._save()
 
     def mark_failed(self, stage: str, step: Optional[str] = None, error: Optional[str] = None) -> None:
@@ -199,7 +224,7 @@ class TaskState:
             target[key] = []
         if not isinstance(target[key], list):
             target[key] = [target[key]]
-        target[key].append(str(value) if isinstance(value, Path) else value)
+        target[key].append(_sanitize_for_yaml(value))
         self._save()
 
     def list_stages(self) -> List[str]:
